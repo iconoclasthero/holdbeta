@@ -1,0 +1,110 @@
+#!/bin/bash
+
+bold="$(tput bold)"
+tput0="$(tput sgr0)"
+red="$(tput setaf 1)"
+blue="$(tput setaf 4)"
+
+editscript(){
+  local scriptpath script path swp
+  scriptpath=$(realpath "$0" 2>/dev/null)
+  script="${scriptpath##*/}"
+  path="${scriptpath%/*}"
+  swp="$path/.${script}.swp"
+
+  [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit
+  printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"
+}
+
+pause(){ read -rp "$*" < /dev/tty; }
+
+is_held() {
+    for held in "${held_packages[@]}"; do
+        if [[ "$held" == "$1" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+# Update and list upgradeable packages
+echo "Updating package lists..."
+#sudo apt update
+
+echo "Getting list of currently held packages..."
+held_packages=($(apt-mark showhold))
+
+# List all upgradeable packages containing 'beta'
+echo "Listing upgradeable 'beta' packages..."
+beta_packages=$(apt list --upgradable 2>/dev/null | grep -i beta)
+
+if [ -n "$beta_packages" ]; then
+  echo "The following 'beta' packages are upgradeable:"
+  while IFS= read -r package; do
+    package_name=$(echo "$package" | cut -d '/' -f 1)
+    if is_held "$package_name"; then
+      echo -e "${blue}${package_name}${tput0} (held)"
+    else
+      echo -e "${red}${package_name}${tput0} (unheld)"
+    fi
+  done <<< "$beta_packages"
+  
+  pause "Press Enter to continue..."
+else
+  echo "No 'beta' packages found."
+  exit 0
+fi
+
+# Iterate through the beta packages and offer options
+while IFS= read -r package; do
+  package_name=$(echo "$package" | cut -d '/' -f 1)
+
+  while true; do
+
+    echo -e "${bold}\nOptions for package '$package_name':${tput0}"
+    # Check if the package is held
+    if is_held "$package_name"; then
+        echo "1) Release hold"
+    else
+        echo "1) Mark as hold"
+    fi
+    echo "2) Show package details"
+    echo "${bold}${red}3) Skip to next package${tput0}"
+    echo "4) Quit"
+
+    # Read the user choice, default to 3 if empty
+    read -rp "Choose an option: " choice < /dev/tty
+    choice=${choice:-3}  # Set default to 3 if choice is empty
+
+    case $choice in
+      1)
+        if is_held "$package_name"; then
+          sudo apt-mark unhold "$package_name"
+          echo "$package_name has been released from hold."
+        else
+          sudo apt-mark hold "$package_name"
+          echo "$package_name has been marked as hold."
+        fi
+        break
+        ;;
+      2)
+        apt show "$package_name"
+        pause "Press Enter to return to the options..."
+        ;;
+      3)
+        break
+        ;;
+      4)
+        echo "Quitting..."
+        exit 0
+        ;;
+      *)
+        echo "Invalid option. Please choose 1, 2, 3, or 4."
+        ;;
+    esac
+  done
+done <<< "$beta_packages"
+
+echo "All beta packages processed."
