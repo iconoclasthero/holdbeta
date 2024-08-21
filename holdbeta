@@ -50,7 +50,11 @@ if [ -n "$beta_packages" ]; then
       echo -e "${red}${package_name}${tput0} (unheld)"
     fi
   done <<< "$beta_packages"
-  
+
+  echo "${blue}on ice    ${tput0}—    ${red}concern${tput0}"
+
+
+
   pause "Press Enter to continue..."
 else
   echo "No 'beta' packages found."
