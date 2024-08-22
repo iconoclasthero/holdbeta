@@ -5,6 +5,32 @@ tput0="$(tput sgr0)"
 red="$(tput setaf 1)"
 blue="$(tput setaf 4)"
 
+heldc="$blue"
+unheldc="$red"
+
+pattern="beta"  # Default pattern
+
+# Parse command-line options
+while getopts ":p:e" opt; do
+  case ${opt} in
+    p )
+      pattern="$OPTARG"
+      ;;
+    e )
+      editscript
+      exit 0
+      ;;
+    \? )
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    : )
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+
 editscript(){
   local scriptpath script path swp
   scriptpath=$(realpath "$0" 2>/dev/null)
@@ -27,8 +53,6 @@ is_held() {
     return 1
 }
 
-[[ "$1" == @(edit|e|-e) ]] && editscript
-
 # Update and list upgradeable packages
 echo "Updating package lists..."
 #sudo apt update
@@ -36,51 +60,53 @@ echo "Updating package lists..."
 echo "Getting list of currently held packages..."
 held_packages=($(apt-mark showhold))
 
-# List all upgradeable packages containing 'beta'
-echo "Listing upgradeable 'beta' packages..."
-beta_packages=$(apt list --upgradable 2>/dev/null | grep -i beta)
+# List all upgradeable packages matching the pattern
+echo "Listing upgradeable packages matching pattern '$pattern'..."
+matching_packages=$(apt list --upgradable 2>/dev/null | grep -i "$pattern")
 
-if [ -n "$beta_packages" ]; then
-  echo "The following 'beta' packages are upgradeable:"
+if [ -n "$matching_packages" ]; then
+  echo "The following packages matching '$pattern' are upgradeable:"
   while IFS= read -r package; do
     package_name=$(echo "$package" | cut -d '/' -f 1)
     if is_held "$package_name"; then
-      echo -e "${blue}${package_name}${tput0} (held)"
+      echo -e "${heldc}${package_name}${tput0} (held)"
     else
-      echo -e "${red}${package_name}${tput0} (unheld)"
+      echo -e "${unheldc}${package_name}${tput0} (unheld)"
     fi
-  done <<< "$beta_packages"
+  done <<< "$matching_packages"
 
-  echo "${blue}on ice    ${tput0}—    ${red}concern${tput0}"
-
-
+  echo "${heldc}on ice    ${tput0}—    ${unheldc}concern${tput0}"
 
   pause "Press Enter to continue..."
 else
-  echo "No 'beta' packages found."
+  echo "No packages matching '$pattern' found."
   exit 0
 fi
 
-# Iterate through the beta packages and offer options
+# Iterate through the matching packages and offer options
 while IFS= read -r package; do
   package_name=$(echo "$package" | cut -d '/' -f 1)
 
   while true; do
 
-    echo -e "${bold}\nOptions for package '$package_name':${tput0}"
-    # Check if the package is held
     if is_held "$package_name"; then
-        echo "1) Release hold"
+      package_color="$heldc"
     else
-        echo "1) Mark as hold"
+      package_color="$unheldc"
+    fi
+
+    echo -e "${bold}\nOptions for package '${package_color}${package_name}${tput0}':${tput0}"
+    if is_held "$package_name"; then
+        echo "1) ${unheldc}Release hold${tput0}"
+    else
+        echo "1) ${heldc}Mark as hold${tput0}"
     fi
     echo "2) Show package details"
-    echo "${bold}${red}3) Skip to next package${tput0}"
+    echo "${bold}3) Skip to next package${tput0} [default]"
     echo "4) Quit"
 
-    # Read the user choice, default to 3 if empty
     read -rp "Choose an option: " choice < /dev/tty
-    choice=${choice:-3}  # Set default to 3 if choice is empty
+    choice=${choice:-3}
 
     case $choice in
       1)
@@ -109,6 +135,6 @@ while IFS= read -r package; do
         ;;
     esac
   done
-done <<< "$beta_packages"
+done <<< "$matching_packages"
 
-echo "All beta packages processed."
+echo "All packages matching '$pattern' processed."
