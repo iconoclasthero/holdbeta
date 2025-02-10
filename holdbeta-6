@@ -4,7 +4,7 @@ bold="$(tput bold)"
 tput0="$(tput sgr0)"
 red="$(tput setaf 1)"
 blue="$(tput setaf 4)"
-
+white="$(tput setaf 15)"
 heldc="$blue"
 unheldc="$red"
 
@@ -72,16 +72,33 @@ done
 ! "${skipup:=false}" && printf 'Updating package lists...\n' && sudo apt update
 
 if [[ "$pattern" ]]; then
-  #pkgmatch=$(apt list --upgradable 2>/dev/null | grep -i "$pattern")
   readarray -t pkgmatch < <(apt list --upgradeable 2>/dev/null|\grep -i "$pattern")
   IFS=; pkgmatchsplat="${pkgmatch[*]}"; unset IFS
   if (( ${#pkgmatch[@]} > 0 )) && [[ "${pkgmatchsplat[*]}" ]]; then
-	 echo "Listing upgradeable packages matching pattern '$pattern'..."
-     echo "The following packages matching '$pattern' are upgradeable:"
-     for i in "${pkgmatch[@]}"; do #while IFS= read -r package; do
+	 printf '\n\n%sListing upgradeable packages matching pattern "%s"...\n' "$bold" "$pattern"
+#     echo "The following packages matching '$pattern' are upgradeable:"
+     for package in "${pkgmatch[@]}"; do #while IFS= read -r package; do
        pkgname="${package%%\/*}"
        if is_held "$pkgname"; then
-         echo -e "${heldc}${pkgname}${tput0} (held)"
+ #        echo -e "${heldc}${pkgname}${tput0} (held)"
+         printf '\n%s%s%s%s (held)\n'  "$bold" "$heldc" "$pkgname" "$tput0"
+       else
+         echo -e "${unheldc}${pkgname}${tput0} (unheld)"
+       fi
+     done
+#     echo "${heldc}on ice    ${tput0}—    ${unheldc}concern${tput0}"
+     printf '%son ice    %s—    %sconcern%s\n\n' "$heldc" "$white" "$unheldc" "$tput0"
+     pause "Press Enter to continue..."
+  elif (( ${#pkgmatch[@]} == 0 )); then
+    readarray -t pkgmatch < <(apt list 2>/dev/null|\grep -i "$pattern")
+    IFS=; pkgmatchsplat="${pkgmatch[*]}"; unset IFS
+	 echo "Listing packages matching pattern '$pattern'..."
+     echo "The following packages matching '$pattern':"
+     for package in "${pkgmatch[@]}"; do #while IFS= read -r package; do
+       pkgname="${package%%\/*}"
+       if is_held "$pkgname"; then
+#         echo -e "${heldc}${pkgname}${tput0} (held)"
+         printf '%s%s%s%s (held)\n'  "$heldc" "$bold" "$pkgname" "$tput0"
        else
          echo -e "${unheldc}${pkgname}${tput0} (unheld)"
        fi
@@ -182,7 +199,7 @@ if (( ${#heldpkgs[@]} > 0 )); then
           break
           ;;
         2)
-          printf '\n%s%s%s%s is held\n' "$bold" "$heldc" "$heldpkg" "$tput0"
+          printf '\n%s%s%s%s is held\n\n\n' "$bold" "$heldc" "$heldpkg" "$tput0"
           break
           ;;
         3)
